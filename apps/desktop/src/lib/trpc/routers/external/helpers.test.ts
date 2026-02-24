@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import os from "node:os";
 import path from "node:path";
+import { PLATFORM } from "../../../../shared/constants";
 import { getAppCommand, resolvePath, stripPathWrappers } from "./helpers";
 
-describe("getAppCommand", () => {
+describe.skipIf(!PLATFORM.IS_MAC)("getAppCommand - macOS", () => {
 	test("returns null for finder (handled specially)", () => {
 		expect(getAppCommand("finder", "/path/to/file")).toBeNull();
 	});
@@ -125,6 +126,231 @@ describe("getAppCommand", () => {
 				command: "open",
 				args: ["-a", "Cursor", "/path/with spaces/file.ts"],
 			},
+		]);
+	});
+});
+
+describe.skipIf(!PLATFORM.IS_LINUX)("getAppCommand - Linux", () => {
+	test("returns null for finder (not supported on Linux)", () => {
+		expect(getAppCommand("finder", "/path/to/file")).toBeNull();
+	});
+
+	test("returns 3 candidates for vscode", () => {
+		const result = getAppCommand("vscode", "/path/to/file");
+		expect(result).toEqual([
+			{ command: "code", args: ["/path/to/file"] },
+			{ command: "code-oss", args: ["/path/to/file"] },
+			{
+				command: "flatpak",
+				args: ["run", "com.visualstudio.code", "/path/to/file"],
+			},
+		]);
+	});
+
+	test("returns 2 candidates for vscode-insiders", () => {
+		const result = getAppCommand("vscode-insiders", "/path/to/file");
+		expect(result).toEqual([
+			{ command: "code-insiders", args: ["/path/to/file"] },
+			{
+				command: "flatpak",
+				args: ["run", "com.visualstudio.code.insiders", "/path/to/file"],
+			},
+		]);
+	});
+
+	test("returns 1 candidate for cursor", () => {
+		const result = getAppCommand("cursor", "/path/to/file");
+		expect(result).toEqual([{ command: "cursor", args: ["/path/to/file"] }]);
+	});
+
+	test("returns 3 candidates for zed", () => {
+		const result = getAppCommand("zed", "/path/to/file");
+		expect(result).toEqual([
+			{ command: "zed", args: ["/path/to/file"] },
+			{ command: "zeditor", args: ["/path/to/file"] },
+			{ command: "flatpak", args: ["run", "dev.zed.Zed", "/path/to/file"] },
+		]);
+	});
+
+	test("returns 1 candidate for sublime", () => {
+		const result = getAppCommand("sublime", "/path/to/file");
+		expect(result).toEqual([{ command: "subl", args: ["/path/to/file"] }]);
+	});
+
+	test("returns 1 candidate for ghostty with --working-directory= flag", () => {
+		const result = getAppCommand("ghostty", "/path/to/file");
+		expect(result).toEqual([
+			{ command: "ghostty", args: ["--working-directory=/path/to/file"] },
+		]);
+	});
+
+	test("returns 1 candidate for warp", () => {
+		const result = getAppCommand("warp", "/path/to/file");
+		expect(result).toEqual([{ command: "warp", args: ["/path/to/file"] }]);
+	});
+
+	test("returns 7 candidates for terminal in fallback order", () => {
+		const result = getAppCommand("terminal", "/path/to/file");
+		expect(result).toEqual([
+			{ command: "kitty", args: ["--directory", "/path/to/file"] },
+			{ command: "alacritty", args: ["--working-directory", "/path/to/file"] },
+			{
+				command: "gnome-terminal",
+				args: ["--working-directory=/path/to/file"],
+			},
+			{ command: "konsole", args: ["--workdir", "/path/to/file"] },
+			{
+				command: "xfce4-terminal",
+				args: ["--working-directory=/path/to/file"],
+			},
+			{ command: "tilix", args: ["--working-directory=/path/to/file"] },
+			{ command: "terminator", args: ["--working-directory=/path/to/file"] },
+		]);
+	});
+
+	describe("JetBrains IDEs", () => {
+		test("returns 4 candidates for intellij", () => {
+			const result = getAppCommand("intellij", "/path/to/file");
+			expect(result).toEqual([
+				{ command: "idea", args: ["/path/to/file"] },
+				{ command: "idea-ultimate", args: ["/path/to/file"] },
+				{ command: "idea-ce", args: ["/path/to/file"] },
+				{
+					command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/idea`,
+					args: ["/path/to/file"],
+				},
+			]);
+		});
+
+		test("returns 4 candidates for pycharm", () => {
+			const result = getAppCommand("pycharm", "/path/to/file");
+			expect(result).toEqual([
+				{ command: "pycharm", args: ["/path/to/file"] },
+				{ command: "pycharm-professional", args: ["/path/to/file"] },
+				{ command: "pycharm-community", args: ["/path/to/file"] },
+				{
+					command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/pycharm`,
+					args: ["/path/to/file"],
+				},
+			]);
+		});
+
+		test("returns 2 candidates for webstorm", () => {
+			const result = getAppCommand("webstorm", "/path/to/file");
+			expect(result).toEqual([
+				{ command: "webstorm", args: ["/path/to/file"] },
+				{
+					command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/webstorm`,
+					args: ["/path/to/file"],
+				},
+			]);
+		});
+
+		test("returns 2 candidates for phpstorm", () => {
+			const result = getAppCommand("phpstorm", "/path/to/file");
+			expect(result).toEqual([
+				{ command: "phpstorm", args: ["/path/to/file"] },
+				{
+					command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/phpstorm`,
+					args: ["/path/to/file"],
+				},
+			]);
+		});
+
+		test("returns 2 candidates for rubymine", () => {
+			const result = getAppCommand("rubymine", "/path/to/file");
+			expect(result).toEqual([
+				{ command: "rubymine", args: ["/path/to/file"] },
+				{
+					command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/rubymine`,
+					args: ["/path/to/file"],
+				},
+			]);
+		});
+
+		test("returns 2 candidates for goland", () => {
+			const result = getAppCommand("goland", "/path/to/file");
+			expect(result).toEqual([
+				{ command: "goland", args: ["/path/to/file"] },
+				{
+					command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/goland`,
+					args: ["/path/to/file"],
+				},
+			]);
+		});
+
+		test("returns 2 candidates for clion", () => {
+			const result = getAppCommand("clion", "/path/to/file");
+			expect(result).toEqual([
+				{ command: "clion", args: ["/path/to/file"] },
+				{
+					command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/clion`,
+					args: ["/path/to/file"],
+				},
+			]);
+		});
+
+		test("returns 2 candidates for rider", () => {
+			const result = getAppCommand("rider", "/path/to/file");
+			expect(result).toEqual([
+				{ command: "rider", args: ["/path/to/file"] },
+				{
+					command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/rider`,
+					args: ["/path/to/file"],
+				},
+			]);
+		});
+
+		test("returns 2 candidates for datagrip", () => {
+			const result = getAppCommand("datagrip", "/path/to/file");
+			expect(result).toEqual([
+				{ command: "datagrip", args: ["/path/to/file"] },
+				{
+					command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/datagrip`,
+					args: ["/path/to/file"],
+				},
+			]);
+		});
+
+		test("returns 1 candidate for fleet", () => {
+			const result = getAppCommand("fleet", "/path/to/file");
+			expect(result).toEqual([{ command: "fleet", args: ["/path/to/file"] }]);
+		});
+
+		test("returns 2 candidates for rustrover", () => {
+			const result = getAppCommand("rustrover", "/path/to/file");
+			expect(result).toEqual([
+				{ command: "rustrover", args: ["/path/to/file"] },
+				{
+					command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/rustrover`,
+					args: ["/path/to/file"],
+				},
+			]);
+		});
+	});
+
+	describe("Unsupported Linux apps", () => {
+		test("returns null for xcode", () => {
+			expect(getAppCommand("xcode", "/path/to/file")).toBeNull();
+		});
+
+		test("returns null for iterm", () => {
+			expect(getAppCommand("iterm", "/path/to/file")).toBeNull();
+		});
+
+		test("returns null for appcode", () => {
+			expect(getAppCommand("appcode", "/path/to/file")).toBeNull();
+		});
+
+		test("returns null for antigravity", () => {
+			expect(getAppCommand("antigravity", "/path/to/file")).toBeNull();
+		});
+	});
+
+	test("preserves paths with spaces", () => {
+		const result = getAppCommand("cursor", "/path/with spaces/file.ts");
+		expect(result).toEqual([
+			{ command: "cursor", args: ["/path/with spaces/file.ts"] },
 		]);
 	});
 });

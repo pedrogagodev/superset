@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import nodePath from "node:path";
 import type { ExternalApp } from "@superset/local-db";
+import { PLATFORM } from "shared/constants";
 
 /** Map of app IDs to their macOS application names */
 const APP_NAMES: Record<ExternalApp, string | null> = {
@@ -31,6 +32,121 @@ const APP_NAMES: Record<ExternalApp, string | null> = {
 	rustrover: "RustRover",
 };
 
+/** Linux command candidates for each app */
+const LINUX_COMMAND_CANDIDATES: Partial<
+	Record<ExternalApp, { command: string; args: string[] }[] | null>
+> = {
+	vscode: [
+		{ command: "code", args: [] },
+		{ command: "code-oss", args: [] },
+		{ command: "flatpak", args: ["run", "com.visualstudio.code"] },
+	],
+	"vscode-insiders": [
+		{ command: "code-insiders", args: [] },
+		{ command: "flatpak", args: ["run", "com.visualstudio.code.insiders"] },
+	],
+	cursor: [{ command: "cursor", args: [] }],
+	zed: [
+		{ command: "zed", args: [] },
+		{ command: "zeditor", args: [] },
+		{ command: "flatpak", args: ["run", "dev.zed.Zed"] },
+	],
+	sublime: [{ command: "subl", args: [] }],
+	ghostty: [{ command: "ghostty", args: ["--working-directory="] }],
+	warp: [{ command: "warp", args: [] }],
+	terminal: [
+		{ command: "kitty", args: ["--directory"] },
+		{ command: "alacritty", args: ["--working-directory"] },
+		{ command: "gnome-terminal", args: ["--working-directory="] },
+		{ command: "konsole", args: ["--workdir"] },
+		{ command: "xfce4-terminal", args: ["--working-directory="] },
+		{ command: "tilix", args: ["--working-directory="] },
+		{ command: "terminator", args: ["--working-directory="] },
+	],
+	// JetBrains IDEs - binary + Toolbox script fallbacks
+	intellij: [
+		{ command: "idea", args: [] },
+		{ command: "idea-ultimate", args: [] },
+		{ command: "idea-ce", args: [] },
+		{
+			command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/idea`,
+			args: [],
+		},
+	],
+	pycharm: [
+		{ command: "pycharm", args: [] },
+		{ command: "pycharm-professional", args: [] },
+		{ command: "pycharm-community", args: [] },
+		{
+			command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/pycharm`,
+			args: [],
+		},
+	],
+	webstorm: [
+		{ command: "webstorm", args: [] },
+		{
+			command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/webstorm`,
+			args: [],
+		},
+	],
+	phpstorm: [
+		{ command: "phpstorm", args: [] },
+		{
+			command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/phpstorm`,
+			args: [],
+		},
+	],
+	rubymine: [
+		{ command: "rubymine", args: [] },
+		{
+			command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/rubymine`,
+			args: [],
+		},
+	],
+	goland: [
+		{ command: "goland", args: [] },
+		{
+			command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/goland`,
+			args: [],
+		},
+	],
+	clion: [
+		{ command: "clion", args: [] },
+		{
+			command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/clion`,
+			args: [],
+		},
+	],
+	rider: [
+		{ command: "rider", args: [] },
+		{
+			command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/rider`,
+			args: [],
+		},
+	],
+	datagrip: [
+		{ command: "datagrip", args: [] },
+		{
+			command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/datagrip`,
+			args: [],
+		},
+	],
+	fleet: [{ command: "fleet", args: [] }],
+	rustrover: [
+		{ command: "rustrover", args: [] },
+		{
+			command: `${process.env.HOME}/.local/share/JetBrains/Toolbox/scripts/rustrover`,
+			args: [],
+		},
+	],
+	// These apps are not supported on Linux (return null)
+	finder: null,
+	xcode: null,
+	iterm: null,
+	appcode: null,
+	antigravity: null,
+};
+
 /**
  * Bundle ID candidates for JetBrains IDEs with multiple editions.
  * `open -b <bundleId>` works regardless of the .app display name,
@@ -51,17 +167,43 @@ export function getAppCommand(
 	app: ExternalApp,
 	targetPath: string,
 ): { command: string; args: string[] }[] | null {
-	const bundleIds = BUNDLE_ID_CANDIDATES[app];
-	if (bundleIds) {
-		return bundleIds.map((id) => ({
-			command: "open",
-			args: ["-b", id, targetPath],
-		}));
+	if (PLATFORM.IS_MAC) {
+		const bundleIds = BUNDLE_ID_CANDIDATES[app];
+		if (bundleIds) {
+			return bundleIds.map((id) => ({
+				command: "open",
+				args: ["-b", id, targetPath],
+			}));
+		}
+
+		const appName = APP_NAMES[app];
+		if (!appName) return null;
+		return [{ command: "open", args: ["-a", appName, targetPath] }];
 	}
 
-	const appName = APP_NAMES[app];
-	if (!appName) return null;
-	return [{ command: "open", args: ["-a", appName, targetPath] }];
+	if (PLATFORM.IS_LINUX) {
+		const candidates = LINUX_COMMAND_CANDIDATES[app];
+		if (!candidates) return null;
+		return candidates.map((candidate) => {
+			const args = [...candidate.args];
+			if (args.length > 0) {
+				const lastArg = args[args.length - 1];
+				if (lastArg.endsWith("=")) {
+					args[args.length - 1] = `${lastArg}${targetPath}`;
+				} else {
+					args.push(targetPath);
+				}
+			} else {
+				args.push(targetPath);
+			}
+			return {
+				command: candidate.command,
+				args,
+			};
+		});
+	}
+
+	return null;
 }
 
 /**
